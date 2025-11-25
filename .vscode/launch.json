@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-TripaisearchApplication<tripaisearch>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.tripaisearch.tripaisearch.TripaisearchApplication",
+            "projectName": "tripaisearch",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
