@@ -1,4 +1,4 @@
-package com.tripaisearch.tripaisearch.filters;
+package com.tripaisearch.tripaisearch.filter;
 
 import java.time.LocalDateTime;
 
