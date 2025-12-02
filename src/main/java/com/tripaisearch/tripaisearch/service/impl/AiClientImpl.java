@@ -1,5 +1,6 @@
 package com.tripaisearch.tripaisearch.service.impl;
 
+import java.util.List;
 import java.util.Map;
 
 import org.json.JSONObject;
@@ -23,6 +24,7 @@ public final class AiClientImpl implements AiClient {
 
     public String generate(String prompt) {
         Map<String, Object> body = Map.of(
+                // "model", "gpt-oss:120b-cloud",
                 "model", "gpt-oss:20b-cloud",
                 "prompt", prompt,
                 "stream", false);
@@ -35,6 +37,28 @@ public final class AiClientImpl implements AiClient {
                 .retrieve()
                 .body(String.class);
         return parseResponse(response);
+    }
+
+    public String chat(String prompt) {
+        Map<String, Object> body = Map.of(
+                "model", "gpt-oss:20b-cloud",
+                "messages", List.of(
+                        Map.of("role", "user", "content", prompt)),
+                "stream", false);
+        if (body == null) {
+            throw new IllegalArgumentException("Body cannot be null");
+        }
+        var response = client.post()
+                .uri("/api/chat")
+                .body(body)
+                .retrieve()
+                .body(String.class);
+        return extractContent(response);
+    }
+
+    private String extractContent(String raw) {
+        var json = new JSONObject(raw);
+        return json.getJSONObject("message").getString("content").trim();
     }
 
     /**

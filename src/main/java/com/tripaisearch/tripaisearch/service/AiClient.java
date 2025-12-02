@@ -8,4 +8,12 @@ public interface AiClient {
          * @return a JSONObject containing the AI-generated response
          */
         public String generate(String prompt);
+
+        /**
+         * Chat with the AI model based on the given prompt.
+         * 
+         * @param prompt the input prompt for the AI model
+         * @return a JSONObject containing the AI-generated chat response
+         */
+        public String chat(String prompt);
 }

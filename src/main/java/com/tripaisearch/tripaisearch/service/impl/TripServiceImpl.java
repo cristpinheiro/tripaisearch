@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tripaisearch.tripaisearch.entity.Trip;
 import com.tripaisearch.tripaisearch.filter.TripSpecs;
 import com.tripaisearch.tripaisearch.model.AiFilters;
+import com.tripaisearch.tripaisearch.model.AiRoute;
 import com.tripaisearch.tripaisearch.repository.TripRepository;
 import com.tripaisearch.tripaisearch.service.AiClient;
 import com.tripaisearch.tripaisearch.service.TripService;
@@ -18,7 +19,45 @@ import com.tripaisearch.tripaisearch.service.TripService;
 @Service
 public class TripServiceImpl implements TripService {
 
-    private static final String AI_ROUTE_PROMPT = "";
+    private static final String AI_ROUTE_PROMPT = """
+            You are a function orchestrator. Read the user message and return ONLY a JSON object:
+            { "function": "...", "args": { ... } }
+
+            Available functions:
+
+            1. findById(id: number)
+            2. listTrips()
+            3. createTrip(pickupDatetime, dropoffDatetime, passengerCount, pickupZone, dropoffZone)
+
+            Rules:
+            - Infer the correct function.
+            - If user asks for a single trip by ID: findById.
+            - If user asks to list/search trips: listTrips.
+            - If user wants to register/create a trip: createTrip.
+            - If no function applies: { "function": "unknown", "args": {} }
+
+            Examples:
+
+            User: "show trip 10"
+            Output: { "function": "findById", "args": { "id": 10 } }
+
+            User: "list all trips"
+            Output: { "function": "listTrips", "args": {} }
+
+            User: "create a trip from A to B with 2 passengers"
+            Output: {
+              "function": "createTrip",
+              "args": {
+                "pickupZone": "A",
+                "dropoffZone": "B",
+                "passengerCount": 2
+              }
+            }
+
+            Now respond to the next user message:
+
+            User:
+            """;
 
     /*
      * Prompt to generate filters for finding all trips
@@ -65,7 +104,8 @@ public class TripServiceImpl implements TripService {
     public List<Trip> findByPrompt(String prompt) {
         if (prompt != null) {
             try {
-                var filters = searchAiFilters(prompt);
+                String aiResponse = searchAiFilters(prompt);
+                var filters = buildAiFilters(aiResponse);
                 Specification<Trip> specification = buildSpecificationFromFilters(filters);
                 return tripRepository.findAll(specification);
             } catch (Exception e) {
@@ -107,17 +147,33 @@ public class TripServiceImpl implements TripService {
      * @return the generated route object
      */
     public Object aiRoute(String body) {
-        var prompt = String.format(AI_ROUTE_PROMPT, body);
-        var aiResponse = aiClient.generate(prompt);
-        return aiResponse;
+        var prompt = AI_ROUTE_PROMPT + body;
+        var aiResponse = aiClient.chat(prompt);
+        var functionWithParams = parseAiRoute(aiResponse);
+        switch (functionWithParams.function()) {
+            case "findById":
+                Long id = Long.valueOf(String.valueOf(functionWithParams.args().get("id")));
+                return findById(id);
+            case "listTrips":
+                return tripRepository.findAll();
+            default:
+                throw new IllegalArgumentException("Cannot determine function from AI response");
+        }
     }
 
-    private AiFilters searchAiFilters(String prompt) {
-        if (prompt == "") {
-            throw new IllegalArgumentException("Prompt cannot be empty");
+    private AiRoute parseAiRoute(String response) {
+        var mapper = new ObjectMapper();
+        try {
+            return mapper.readValue(response, AiRoute.class);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse AI route", e);
         }
-        var promptWithSpec = AI_FILTER_FIND_ALL_PROMPT + prompt;
-        var response = aiClient.generate(promptWithSpec);
+    }
+
+    /*
+     * Helper method to get AI-generated filters from prompt
+     */
+    private AiFilters buildAiFilters(String response) {
         var mapper = new ObjectMapper();
         // Accept dates in the form "yyyy-MM-dd HH:mm:ss" (space between date and time)
         var formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -131,6 +187,14 @@ public class TripServiceImpl implements TripService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse AI filters", e);
         }
+    }
+
+    private String searchAiFilters(String prompt) {
+        if (prompt == "") {
+            throw new IllegalArgumentException("Prompt cannot be empty");
+        }
+        var promptWithSpec = AI_FILTER_FIND_ALL_PROMPT + prompt;
+        return aiClient.generate(promptWithSpec);
     }
 
     /**
